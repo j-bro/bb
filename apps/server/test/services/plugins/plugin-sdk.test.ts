@@ -118,6 +118,8 @@ describe("plugin bb.sdk bind gate", () => {
     ),
     replaceDeclarationsForOwner: vi.fn(),
     clearDeclarationsForOwner: vi.fn(),
+    setServerTunnelIdentity: vi.fn(),
+    clearServerTunnelIdentity: vi.fn(),
     setNextTunnelConfig: vi.fn(),
     listNextTunnelStatuses: vi.fn(() => [
       {

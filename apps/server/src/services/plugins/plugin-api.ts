@@ -538,6 +538,7 @@ export function createPluginApi(options: {
     ports: readonly number[],
   ) => readonly number[];
   declareSharedPorts: PluginHosts["declareSharedPorts"];
+  setServerTunnelIdentity: PluginHosts["internal_DO_NOT_USE_setServerTunnelIdentity"];
   setNextTunnels: PluginHosts["internal_DO_NOT_USE_setNextTunnels"];
   nextTunnelStatuses: PluginHosts["internal_DO_NOT_USE_nextTunnelStatuses"];
   onNextTunnelStatusChange: PluginHosts["internal_DO_NOT_USE_onNextTunnelStatusChange"];
@@ -587,6 +588,7 @@ export function createPluginApi(options: {
     ensureSharedPortTunnel,
     validateSharedPortDeclaration,
     declareSharedPorts,
+    setServerTunnelIdentity,
     setNextTunnels,
     nextTunnelStatuses,
     onNextTunnelStatusChange,
@@ -1202,6 +1204,10 @@ export function createPluginApi(options: {
     internal_DO_NOT_USE_setNextTunnels(config) {
       assertLive();
       setNextTunnels(config);
+    },
+    internal_DO_NOT_USE_setServerTunnelIdentity(identity) {
+      assertLive();
+      setServerTunnelIdentity(identity);
     },
     internal_DO_NOT_USE_nextTunnelStatuses() {
       assertLive();

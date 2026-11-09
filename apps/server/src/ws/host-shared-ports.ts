@@ -15,6 +15,12 @@ import type { NotificationHub } from "./hub.js";
 interface HostSharedPortCoordinatorDeps {
   db: DbConnection;
   hub: Pick<NotificationHub, "sendDaemonMessage">;
+  /**
+   * True for the server (primary) host. The server host never holds a
+   * connect machine credential: its ports are served through the server
+   * tunnel, so declarations and tunnel identity resolve without a daemon.
+   */
+  isServerHost?: (hostId: string) => boolean;
 }
 
 interface SharedPortDeclaration {
@@ -86,8 +92,53 @@ export class HostSharedPortCoordinator {
     { sessionId: string; status: HostDaemonConnectNextStatus }
   >();
   private readonly nextTunnelListeners = new Set<() => void>();
+  private serverTunnelIdentity: HostDaemonConnectTunnelIdentity | null = null;
+  private serverTunnelOwner: string | null = null;
 
   constructor(private readonly deps: HostSharedPortCoordinatorDeps) {}
+
+  private isServerHost(hostId: string): boolean {
+    return this.deps.isServerHost?.(hostId) ?? false;
+  }
+
+  private getServerTunnelIdentity(): HostDaemonConnectTunnelIdentity | null {
+    return this.serverTunnelIdentity;
+  }
+
+  /**
+   * Records the server tunnel identity reported by the connect plugin.
+   * The server host shares ports through the server tunnel, so plugins can
+   * declare server-host ports and resolve a public tunnel identity for them
+   * without the server host holding a connect machine credential.
+   */
+  setServerTunnelIdentity(
+    ownerId: string,
+    identity: HostDaemonConnectTunnelIdentity | null,
+  ): void {
+    if (ownerId.trim().length === 0) {
+      throw new Error("server tunnel identity ownerId must be non-empty");
+    }
+    if (identity !== null) {
+      hostDaemonConnectTunnelIdentitySchema.parse(identity);
+    }
+    if (identity === null) {
+      // Only the owner clears; a null from any other plugin is a no-op.
+      if (this.serverTunnelOwner === ownerId) {
+        this.serverTunnelOwner = null;
+        this.serverTunnelIdentity = null;
+      }
+      return;
+    }
+    this.serverTunnelOwner = ownerId;
+    this.serverTunnelIdentity = identity;
+  }
+
+  clearServerTunnelIdentity(ownerId: string): void {
+    if (this.serverTunnelOwner === ownerId) {
+      this.serverTunnelOwner = null;
+      this.serverTunnelIdentity = null;
+    }
+  }
 
   recordHostConnectCapability(args: {
     hostId: string;
@@ -320,14 +371,22 @@ export class HostSharedPortCoordinator {
   }
 
   getTunnelIdentity(hostId: string): HostDaemonConnectTunnelIdentity | null {
+    const host = this.requireShareCapableHost(hostId);
+    if (this.isServerHost(hostId)) {
+      return this.requireServerTunnelIdentity(host);
+    }
     this.requireConnectedEnrolledHost(hostId);
     return this.tunnelIdentityByHost.get(hostId) ?? null;
   }
 
-  ensureTunnelIdentity(
+  async ensureTunnelIdentity(
     hostId: string,
     ensure: () => Promise<HostDaemonConnectTunnelIdentity>,
   ): Promise<HostDaemonConnectTunnelIdentity> {
+    const host = this.requireShareCapableHost(hostId);
+    if (this.isServerHost(hostId)) {
+      return this.requireServerTunnelIdentity(host);
+    }
     const current = this.getTunnelIdentity(hostId);
     if (current !== null) {
       return Promise.resolve(current);
@@ -381,6 +440,7 @@ export class HostSharedPortCoordinator {
 
   private requireDurablyEnrolledHost(hostId: string) {
     const host = this.requireShareCapableHost(hostId);
+    if (this.isServerHost(hostId)) return host;
     if (host.connectMachineId === null) {
       throw new ApiError(
         409,
@@ -390,6 +450,19 @@ export class HostSharedPortCoordinator {
       );
     }
     return host;
+  }
+
+  private requireServerTunnelIdentity(host: { id: string; name: string }) {
+    const identity = this.getServerTunnelIdentity();
+    if (identity === null) {
+      throw new ApiError(
+        409,
+        "connect_not_paired",
+        `cannot share ports from host "${host.name}" (${host.id}) because this bb is not signed in to a bb account — run \`bb account login\`, then share again`,
+        false,
+      );
+    }
+    return identity;
   }
 
   private connectCapabilityState(

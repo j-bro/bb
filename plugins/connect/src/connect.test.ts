@@ -1474,6 +1474,22 @@ describe("connect plugin", () => {
     expect(harness.needsConfigurationMessages).toEqual([]);
   });
 
+  it("publishes the server tunnel identity so other plugins can share server-host ports", async () => {
+    const { harness } = await loadPlugin();
+    expect(harness.internal_DO_NOT_USE_serverTunnelIdentity).toBeNull();
+    await signIn(host!);
+    await vi.waitFor(() => {
+      expect(harness.internal_DO_NOT_USE_serverTunnelIdentity).toEqual({
+        label: "sawyer",
+        baseDomain: "getbb.app",
+      });
+    });
+    account.signOut();
+    await vi.waitFor(() => {
+      expect(harness.internal_DO_NOT_USE_serverTunnelIdentity).toBeNull();
+    });
+  });
+
   it("uses the worktree-local Cloud dashboard while signed out in development", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_DEV_CONNECT_BASE_URL", "http://bb.localhost:59329");

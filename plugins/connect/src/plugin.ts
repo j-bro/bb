@@ -4,6 +4,7 @@ import {
   watchAccount,
 } from "bb-plugin-bb-account/src/client.js";
 import { resolveDefaultConnectBaseUrl } from "@bb/connect-client";
+import { deriveConnectBaseUrl } from "@bb/connect-client";
 import { registerConnectCli } from "./cli.js";
 import { HostedConnectApi } from "./hosted.js";
 import { ShareHostResolver } from "./hosts.js";
@@ -89,21 +90,47 @@ export function createConnectPlugin(options: ConnectPluginOptions = {}) {
       await shares.pruneHost(host.id);
     });
 
-    const recheckServerAccess = createServerAccessRecheck(bb);
-    tunnel = new ConnectTunnel({
-      shares,
-      readCredential: () => account.connectCredential(),
-      confirmRefusedCredential: (credential) =>
-        account.confirmRefusedCredential(credential),
-      defaultBaseUrl: resolveDefaultConnectBaseUrl(process.env),
-      enabled: currentSettings.remoteAccess,
-      getLoopbackBaseUrl,
-      log: bb.log,
-      onStatusChange: (status) => {
-        bb.realtime.publish(CONNECT_REALTIME_CHANNEL, status);
-        recheckServerAccess(status);
-      },
-    });
+  const recheckServerAccess = createServerAccessRecheck(bb);
+  const publishServerTunnelIdentity = () => {
+    const identity = tunnel.getIdentity();
+    try {
+      bb.hosts.internal_DO_NOT_USE_setServerTunnelIdentity(
+        identity === null
+          ? null
+          : {
+              label: identity.handle,
+              // Same derivation as the public share URL: the handle is
+              // served at <handle>--<port>.<apex of the server URL>.
+              baseDomain: new URL(deriveConnectBaseUrl(identity.serverUrl))
+                .host,
+            },
+      );
+    } catch (error) {
+      bb.log.warn(
+        `Sharing server-host ports is unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      try {
+        bb.hosts.internal_DO_NOT_USE_setServerTunnelIdentity(null);
+      } catch {
+        // Best effort: leave the previous identity untouched.
+      }
+    }
+  };
+  tunnel = new ConnectTunnel({
+    shares,
+    readCredential: () => account.connectCredential(),
+    confirmRefusedCredential: (credential) =>
+      account.confirmRefusedCredential(credential),
+    defaultBaseUrl: resolveDefaultConnectBaseUrl(process.env),
+    enabled: currentSettings.remoteAccess,
+    getLoopbackBaseUrl,
+    log: bb.log,
+    onStatusChange: (status) => {
+      bb.realtime.publish(CONNECT_REALTIME_CHANNEL, status);
+      recheckServerAccess(status);
+      publishServerTunnelIdentity();
+    },
+  });
     settings.onChange((next) => {
       currentSettings = next;
       tunnel.setEnabled(next.remoteAccess);

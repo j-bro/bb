@@ -30,6 +30,7 @@ import {
 } from "@bb/db";
 import { initDb } from "./db.js";
 import { createApp } from "./server.js";
+import { readPrimaryHostIdFromDataDir } from "./services/hosts/primary-host.js";
 import { PendingInteractionLifecycle } from "./services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "./services/machine-auth.js";
 import { resolveBuiltinSkillsRootPath } from "./services/skills/builtin-skills-copy.js";
@@ -177,7 +178,16 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
       : null;
   const hub = new NotificationHub();
   const watchInterests = new WatchInterestCoordinator({ db, hub });
-  const sharedPorts = new HostSharedPortCoordinator({ db, hub });
+  const sharedPorts = new HostSharedPortCoordinator({
+    db,
+    hub,
+    // The server host never holds a connect machine credential; its ports
+    // are served through the server tunnel once the connect plugin reports
+    // the paired identity via internal_DO_NOT_USE_setServerTunnelIdentity.
+    isServerHost: (hostId) =>
+      readPrimaryHostIdFromDataDir({ dataDir: serverConfig.BB_DATA_DIR }) ===
+      hostId,
+  });
   const lifecycleDedupers = createLifecycleDedupers();
   const appUrl = toOptionalString(serverConfig.BB_APP_URL);
 

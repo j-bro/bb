@@ -2187,6 +2187,21 @@ export interface PluginHosts {
   internal_DO_NOT_USE_nextTunnelStatuses(): InternalDoNotUsePluginHostNextTunnelStatus[];
 
   /**
+   * Internal to bb's own connect plugin. Do not use: it is not part of the
+   * plugin API and may change or disappear in any release.
+   *
+   * Publish the server tunnel identity (`{ label, baseDomain }` derived from
+   * the paired getbb.app handle) so other plugins can share ports on the
+   * server host through `declareSharedPorts`/`ensureSharedPortTunnel`. The
+   * server host never holds a connect machine credential, so without this
+   * the control plane rejects every server-host declaration. Pass `null`
+   * when unpaired. Cleared when the owning plugin is disabled.
+   */
+  internal_DO_NOT_USE_setServerTunnelIdentity(
+    identity: PluginSharedPortTunnelIdentity | null,
+  ): void;
+
+  /**
    * Internal to bb's own connect plugins. Do not use: it is not part of the
    * plugin API and may change or disappear in any release.
    *

@@ -1876,6 +1876,12 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
           ports,
         });
       },
+      setServerTunnelIdentity: (identity) => {
+        if (!deps.sharedPorts) {
+          throw new Error("host shared-port control plane is unavailable");
+        }
+        deps.sharedPorts.setServerTunnelIdentity(row.id, identity);
+      },
       setNextTunnels: (config) => {
         if (!deps.sharedPorts) {
           throw new Error("host shared-port control plane is unavailable");
@@ -2069,6 +2075,7 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
         for (const rollback of rollbackGenerations.reverse()) rollback();
         loaded.delete(row.id);
         deps.sharedPorts?.clearDeclarationsForOwner(row.id);
+        deps.sharedPorts?.clearServerTunnelIdentity(row.id);
         discardCandidate(plugin);
         return hungServicesDetail(hungAfterDispose);
       }
@@ -2189,6 +2196,7 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
     releaseMutableRoots(plugin.moduleRootUrls);
     hostArtifacts.delete(id);
     deps.sharedPorts?.clearDeclarationsForOwner(id);
+    deps.sharedPorts?.clearServerTunnelIdentity(id);
   }
 
   async function disposeAll(): Promise<void> {

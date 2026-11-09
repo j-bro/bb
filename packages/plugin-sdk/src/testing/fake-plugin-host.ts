@@ -374,6 +374,8 @@ export interface FakePluginInspectionState {
   }>;
   /** The last `bb.hosts.internal_DO_NOT_USE_setNextTunnels` config, or null. */
   readonly internal_DO_NOT_USE_nextTunnelConfig: InternalDoNotUsePluginNextTunnelConfig | null;
+  /** The last `bb.hosts.internal_DO_NOT_USE_setServerTunnelIdentity` identity, or null. */
+  readonly internal_DO_NOT_USE_serverTunnelIdentity: PluginSharedPortTunnelIdentity | null;
   /**
    * Replace what `bb.hosts.internal_DO_NOT_USE_nextTunnelStatuses` returns and call
    * every `internal_DO_NOT_USE_onNextTunnelStatusChange` listener.
@@ -1331,6 +1333,7 @@ function createFakePluginHostInternal(
   const sharedPortDeclarations: FakePluginHarness["sharedPortDeclarations"] =
     [];
   let nextTunnelConfig: InternalDoNotUsePluginNextTunnelConfig | null = null;
+  let serverTunnelIdentity: PluginSharedPortTunnelIdentity | null = null;
   let nextTunnelStatuses: InternalDoNotUsePluginHostNextTunnelStatus[] = [];
   const nextTunnelListeners = new Set<() => void>();
   const hostRpcCalls: ExperimentalFakeHostRpcCall[] = [];
@@ -1484,6 +1487,11 @@ function createFakePluginHostInternal(
           ? null
           : { domain: config.domain, server: { ...config.server } };
     },
+    internal_DO_NOT_USE_setServerTunnelIdentity(identity) {
+      assertLive();
+      serverTunnelIdentity =
+        identity === null ? null : { ...identity };
+    },
     internal_DO_NOT_USE_nextTunnelStatuses() {
       assertLive();
       return structuredClone(nextTunnelStatuses);
@@ -1499,6 +1507,7 @@ function createFakePluginHostInternal(
   disposeHooks.push(() => {
     sharedPortDeclarations.length = 0;
     nextTunnelConfig = null;
+    serverTunnelIdentity = null;
     nextTunnelListeners.clear();
   });
 
@@ -1756,6 +1765,9 @@ function createFakePluginHostInternal(
     sharedPortDeclarations,
     get internal_DO_NOT_USE_nextTunnelConfig() {
       return nextTunnelConfig;
+    },
+    get internal_DO_NOT_USE_serverTunnelIdentity() {
+      return serverTunnelIdentity;
     },
     internal_DO_NOT_USE_setNextTunnelStatuses(statuses) {
       nextTunnelStatuses = structuredClone([...statuses]);
