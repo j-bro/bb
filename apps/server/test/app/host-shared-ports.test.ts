@@ -850,6 +850,43 @@ describe("server host shared ports", () => {
     ).toThrow(/has no bb connect machine credential/);
   });
 
+
+  it("declares server-host ports even when its daemon reports no machine credential", async () => {
+    const { db, host, sharedPorts } = setupServerHost();
+    const session = openSession(db, {
+      hostId: host.id,
+      instanceId: "server-instance",
+      hostName: host.name,
+      dataDir: "/tmp/host-data",
+      protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      heartbeatIntervalMs: 30_000,
+      leaseTimeoutMs: 90_000,
+    });
+    sharedPorts.recordHostConnectCapability({
+      hostId: host.id,
+      sessionId: session.id,
+      hasMachineCredential: false,
+    });
+    expect(() =>
+      sharedPorts.declareSharedPorts({
+        ownerId: "android-emulator",
+        hostId: host.id,
+        ports: [6090],
+      }),
+    ).not.toThrow();
+    await expect(
+      sharedPorts.ensureTunnelIdentity(host.id, () => {
+        throw new Error("daemon must not be contacted for the server host");
+      }),
+    ).resolves.toEqual(SERVER_TUNNEL_IDENTITY);
+    // The daemon receives nothing: server ports are served, not tunnelled
+    // (the generation still ticks because a declaration was added).
+    expect(sharedPorts.reconcileSharedPortsForHost(host.id)).toEqual({
+      generation: 1,
+      ports: [],
+    });
+  });
+
   it("only lets the owning plugin clear the server tunnel identity", async () => {
     const { host, sharedPorts } = setupServerHost();
     sharedPorts.setServerTunnelIdentity("other-plugin", null);

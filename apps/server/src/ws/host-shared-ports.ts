@@ -282,9 +282,13 @@ export class HostSharedPortCoordinator {
     const normalized = normalizePorts(ports);
     if (normalized.length > 0) {
       const host = this.requireDurablyEnrolledHost(hostId);
-      const state = this.connectCapabilityState(hostId);
-      if (state !== null && !state.capability.hasMachineCredential) {
-        this.throwMissingMachineCredential(host);
+      // The server host daemon never holds a connect machine credential and
+      // needs none: its ports are served through the server tunnel.
+      if (!this.isServerHost(hostId)) {
+        const state = this.connectCapabilityState(hostId);
+        if (state !== null && !state.capability.hasMachineCredential) {
+          this.throwMissingMachineCredential(host);
+        }
       }
     }
     return normalized;
