@@ -75,6 +75,8 @@ export interface PluginServiceDeps {
     | "validateSharedPortDeclaration"
     | "replaceDeclarationsForOwner"
     | "clearDeclarationsForOwner"
+    | "setServerTunnelIdentity"
+    | "clearServerTunnelIdentity"
     | "setNextTunnelConfig"
     | "listNextTunnelStatuses"
     | "onNextTunnelStatusChange"

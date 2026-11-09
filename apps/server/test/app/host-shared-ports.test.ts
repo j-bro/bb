@@ -771,3 +771,99 @@ describe("connect next machine tunnels", () => {
     });
   });
 });
+
+const SERVER_TUNNEL_IDENTITY = {
+  label: "bb-one",
+  baseDomain: "getbb.app",
+};
+
+function setupServerHost(args: { paired?: boolean } = {}) {
+  const db = createMigratedConnection();
+  const hub = new NotificationHub();
+  const sharedPorts = new HostSharedPortCoordinator({
+    db,
+    hub,
+    isServerHost: (hostId) => hostId === "host-1",
+  });
+  // The server host never gets a connect machine credential: it is the
+  // server itself, and its ports are served through the server tunnel.
+  const host = upsertHost(db, noopNotifier, {
+    id: "host-1",
+    name: "groot",
+  });
+  if (args.paired !== false) {
+    sharedPorts.setServerTunnelIdentity("connect", SERVER_TUNNEL_IDENTITY);
+  }
+  return { db, host, hub, sharedPorts };
+}
+
+describe("server host shared ports", () => {
+  it("shares server-host ports through the server tunnel without a machine credential", async () => {
+    const { host, sharedPorts } = setupServerHost();
+    expect(() =>
+      sharedPorts.declareSharedPorts({
+        ownerId: "android-emulator",
+        hostId: host.id,
+        ports: [6090],
+      }),
+    ).not.toThrow();
+
+    let daemonContacted = false;
+    await expect(
+      sharedPorts.ensureTunnelIdentity(host.id, () => {
+        daemonContacted = true;
+        throw new Error("daemon must not be contacted for the server host");
+      }),
+    ).resolves.toEqual(SERVER_TUNNEL_IDENTITY);
+    expect(daemonContacted).toBe(false);
+    expect(sharedPorts.getTunnelIdentity(host.id)).toEqual(
+      SERVER_TUNNEL_IDENTITY,
+    );
+  });
+
+  it("reports unpaired when the server tunnel identity is absent", async () => {
+    const { host, sharedPorts } = setupServerHost({ paired: false });
+    expect(() =>
+      sharedPorts.declareSharedPorts({
+        ownerId: "android-emulator",
+        hostId: host.id,
+        ports: [6090],
+      }),
+    ).not.toThrow();
+
+    await expect(
+      sharedPorts.ensureTunnelIdentity(host.id, () => {
+        throw new Error("daemon must not be contacted for the server host");
+      }),
+    ).rejects.toMatchObject({ body: { code: "connect_not_paired" } });
+  });
+
+  it("still requires a machine credential for non-server hosts", () => {
+    const { db, sharedPorts } = setupServerHost();
+    upsertHost(db, noopNotifier, { id: "other-host", name: "laptop" });
+    expect(() =>
+      sharedPorts.declareSharedPorts({
+        ownerId: "android-emulator",
+        hostId: "other-host",
+        ports: [6090],
+      }),
+    ).toThrow(/has no bb connect machine credential/);
+  });
+
+  it("only lets the owning plugin clear the server tunnel identity", async () => {
+    const { host, sharedPorts } = setupServerHost();
+    sharedPorts.setServerTunnelIdentity("other-plugin", null);
+    await expect(
+      sharedPorts.ensureTunnelIdentity(host.id, () => {
+        throw new Error("unreachable");
+      }),
+    ).resolves.toEqual(SERVER_TUNNEL_IDENTITY);
+
+    sharedPorts.setServerTunnelIdentity("connect", null);
+    await expect(
+      sharedPorts.ensureTunnelIdentity(host.id, () => {
+        throw new Error("unreachable");
+      }),
+    ).rejects.toMatchObject({ body: { code: "connect_not_paired" } });
+  });
+});
